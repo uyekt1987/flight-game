@@ -1,1 +1,71 @@
-placeholder
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Langit Biru — Island Flight</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1c2c; font-family: "Segoe UI", system-ui, sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .hidden { display: none !important; }
+
+  /* ---- HUD ---- */
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; z-index: 5; }
+  .hud-top { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
+  .hud-left { position: absolute; top: 12px; left: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .hud-box { background: rgba(8, 24, 40, 0.62); border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 10px; padding: 6px 12px; min-width: 86px; text-align: center; backdrop-filter: blur(2px); }
+  .hud-label { display: block; font-size: 10px; letter-spacing: 2px; color: #9fd8ff; font-weight: 700; }
+  .hud-value { display: block; font-size: 20px; font-weight: 800; line-height: 1.25; font-variant-numeric: tabular-nums; text-shadow: 0 1px 4px rgba(0,0,0,0.6); }
+  .hud-value.lives { color: #ff6b81; letter-spacing: 2px; }
+  .throttle-track { width: 120px; height: 10px; background: rgba(255,255,255,0.18); border-radius: 5px; margin-top: 4px; overflow: hidden; }
+  .throttle-fill { height: 100%; width: 55%; background: linear-gradient(90deg, #2ecc71, #f1c40f, #e74c3c); border-radius: 5px; }
+  .hud-compass { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); margin-top: 64px; width: 260px; height: 26px; overflow: hidden; background: rgba(8, 24, 40, 0.55); border: 1px solid rgba(255,255,255,0.25); border-radius: 13px; }
+  .compass-tape { position: relative; height: 100%; }
+  .compass-tape span { position: absolute; top: 50%; transform: translate(-50%, -50%); font-size: 12px; font-weight: 700; color: #cfeaff; }
+  .compass-needle { position: absolute; left: 50%; top: 0; transform: translateX(-50%); color: #ffb61e; font-size: 11px; line-height: 1; }
+  .ring-arrow { position: absolute; left: 50%; top: 16%; font-size: 34px; color: #ffb61e; text-shadow: 0 0 12px rgba(255, 150, 0, 0.9), 0 2px 4px rgba(0,0,0,0.7); font-weight: 900; }
+  .ring-dist { position: absolute; left: 50%; top: calc(16% + 34px); transform: translateX(-50%); font-size: 13px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+  .hud-toast { position: absolute; left: 50%; top: 24%; transform: translateX(-50%); background: rgba(8, 24, 40, 0.75); border: 1px solid #ffb61e; color: #ffe9a8; padding: 8px 18px; border-radius: 20px; font-size: 17px; font-weight: 700; opacity: 0; transition: opacity 0.25s; white-space: nowrap; }
+  .hud-toast.show { opacity: 1; }
+  .hud-camera { position: absolute; bottom: 12px; left: 12px; font-size: 12px; letter-spacing: 1px; color: rgba(255,255,255,0.85); background: rgba(8,24,40,0.5); padding: 5px 10px; border-radius: 8px; }
+
+  /* ---- Cockpit instrument panel ---- */
+  #cockpit { position: fixed; left: 50%; bottom: 0; transform: translateX(-50%); z-index: 6; display: none; pointer-events: none; }
+  #cockpit.visible { display: block; }
+  .panel { display: flex; gap: 14px; align-items: flex-end; background: linear-gradient(180deg, rgba(20,26,34,0.92), rgba(10,14,20,0.96)); border: 2px solid #3a4552; border-bottom: none; border-radius: 16px 16px 0 0; padding: 12px 20px 10px; box-shadow: 0 -4px 30px rgba(0,0,0,0.55), inset 0 0 40px rgba(255, 180, 40, 0.06); }
+  .gauge { text-align: center; }
+  .gauge-label { font-size: 11px; letter-spacing: 2px; color: #ffd75e; font-weight: 700; margin-top: 5px; }
+  .gauge-label span { color: #fff; }
+  .horizon { width: 110px; height: 110px; border-radius: 50%; overflow: hidden; border: 3px solid #4a5563; box-shadow: 0 0 18px rgba(120, 200, 255, 0.35), inset 0 0 12px rgba(0,0,0,0.6); position: relative; background: #123a5c; }
+  .horizon-disc { position: absolute; inset: -60px; }
+  .horizon-sky { height: 50%; background: linear-gradient(180deg, #2f7fd0, #7db8e8); }
+  .horizon-ground { height: 50%; background: linear-gradient(180deg, #8a5a2b, #5d3a1a); }
+  .horizon-line { position: absolute; top: 50%; left: 0; right: 0; height: 3px; background: #fff; margin-top: -1px; }
+  .horizon::after { content: ""; position: absolute; left: 50%; top: 50%; width: 34px; height: 4px; margin: -2px 0 0 -17px; background: #ffb61e; border-radius: 2px; box-shadow: 0 0 8px rgba(255,182,30,0.9); }
+  .dial { width: 96px; height: 96px; border-radius: 50%; border: 3px solid #4a5563; background: radial-gradient(circle at 50% 40%, #1c2836, #0b1118 75%); box-shadow: 0 0 16px rgba(120, 200, 255, 0.3), inset 0 0 14px rgba(0,0,0,0.7); position: relative; }
+  .dial::before { content: ""; position: absolute; inset: 8px; border-radius: 50%; border: 1px dashed rgba(255,255,255,0.25); }
+  .needle { position: absolute; left: 50%; top: 50%; width: 3px; height: 40px; background: #ff5a3c; transform-origin: 50% 0; transform: rotate(-90deg); margin-left: -1.5px; box-shadow: 0 0 8px rgba(255, 90, 60, 0.8); }
+  .dial-center { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #d8dee6; }
+  .fuel-track { width: 90px; height: 10px; background: rgba(255,255,255,0.15); border-radius: 5px; overflow: hidden; margin: 6px auto 4px; }
+  .fuel-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #e74c3c, #f1c40f, #2ecc71); }
+
+  /* ---- Title / end screens ---- */
+  #title-screen, #end-screen { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: linear-gradient(180deg, rgba(6,18,32,0.25), rgba(6,18,32,0.55)); }
+  .title-card { text-align: center; color: #fff; background: rgba(8, 24, 40, 0.72); border: 1px solid rgba(255,255,255,0.25); border-radius: 20px; padding: 30px 44px; max-width: 520px; box-shadow: 0 10px 50px rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+  .title-card h1 { margin: 0 0 4px; font-size: 52px; letter-spacing: 6px; color: #ffd75e; text-shadow: 0 3px 0 #b97a00, 0 6px 18px rgba(0,0,0,0.6); }
+  .title-sub { margin: 0 0 16px; font-size: 16px; color: #cfeaff; }
+  .title-rules { font-size: 15px; line-height: 1.65; color: #eef6ff; }
+  .title-rules b { color: #ffd75e; }
+  #start-btn, #again-btn { margin-top: 18px; font-size: 20px; font-weight: 800; letter-spacing: 2px; color: #1a2a00; background: linear-gradient(180deg, #ffd75e, #ff9d1e); border: none; border-radius: 12px; padding: 14px 34px; cursor: pointer; box-shadow: 0 5px 0 #b97a00, 0 8px 20px rgba(0,0,0,0.45); }
+  #start-btn:hover, #again-btn:hover { filter: brightness(1.08); }
+  #start-btn:active, #again-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #b97a00; }
+  .title-keys { margin: 18px 0 0; font-size: 13px; line-height: 1.7; color: #9fb8cc; }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Langit Biru: terbangkan pesawat melewati ring emas di atas kepulauan"></canvas>
+<script src="./vendor/three.min.js"></script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
