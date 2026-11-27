@@ -3,8 +3,11 @@
 // an orbiting camera shows the runway, the town and the sea before the
 // player clicks MULAI TERBANG. Chase and cockpit cameras follow the
 // plane; the timer, lives and ring mission run while playing.
+// Golden-hour weather, drifting clouds, birds and wind come from the
+// weather system; the wind pushes the plane and is shown on the HUD.
 
-import { buildTerrain, buildSea, buildSky, buildClouds, buildRunway, buildScenery, buildLights, groundHeight } from './terrain.js';
+import { buildTerrain, buildSea, buildSky, buildClouds, buildRunway, buildScenery, buildLights, groundHeight, RUNWAY_POS } from './terrain.js';
+import { buildWeather, updateWeather, buildBirds, updateBirds } from './weather.js';
 import { buildPlane, createFlightState, resetFlight, stepFlight, applyPlaneTransform } from './plane.js';
 import { buildRings, createMission, resetMission, checkRing, updateRings, currentRing } from './rings.js';
 import { createInput, bindInput, readSteering, readThrottle } from './input.js';
@@ -14,6 +17,11 @@ import { parseShot, applyShot, markShotReady } from './shots.js';
 
 const GAME_SECONDS = 150;
 const START_LIVES = 3;
+// Landing bonus: within this distance (m) of the runway centre, slow and
+// on the ground, after all 8 rings — a perfect landing ends the mission.
+const LANDING_RADIUS = 45;
+const LANDING_MAX_SPEED = 12;
+const LANDING_BONUS = 1000;
 
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -35,6 +43,8 @@ const sea = buildSea(scene);
 const clouds = buildClouds(scene);
 const runway = buildRunway(scene);
 buildScenery(scene);
+const weather = buildWeather(scene);
+const birds = buildBirds(scene);
 const plane = buildPlane(scene);
 const rings = buildRings(scene);
 
@@ -155,12 +165,36 @@ const SIM_STEP = 1 / 60;
 function stepGame(fixedDt) {
   readSteering(game.input);
   readThrottle(game.input, game.flight, fixedDt);
-  const result = stepFlight(game.flight, game.input, fixedDt);
+  const result = stepFlight(game.flight, game.input, fixedDt, game.mission.wind);
   game.timeLeft -= fixedDt;
+  const perfectBefore = game.mission.perfect;
   const earned = checkRing(game.mission, rings, game.flight.pos);
-  if (earned > 0) {
+  // A bonus gate banks +10 s into mission.timeBonus; apply it here.
+  if (game.mission.timeBonus > 0) {
+    game.timeLeft = Math.min(GAME_SECONDS + 30, game.timeLeft + game.mission.timeBonus);
+    game.mission.timeBonus = 0;
+    playRingChime(game.sound);
+    showToast('GERBANG BONUS! +10 detik & +150 poin', 2200);
+  } else if (game.mission.perfect > perfectBefore) {
+    playRingChime(game.sound);
+    showToast('SEMPURNA! +250 poin', 1800);
+  } else if (earned > 0) {
     playRingChime(game.sound);
     showToast(earned >= 2000 ? 'PUTARAN SELESAI! +' + earned + ' poin' : 'Ring! +' + earned + ' poin', 1600);
+  }
+  // Perfect landing: all 8 rings done, then touch down slow on the
+  // runway centre — +1000 and the mission ends in glory.
+  if (game.mission.ringsCleared >= 8 && !game.mission.landingBonus
+      && game.flight.onGround && game.flight.speed < LANDING_MAX_SPEED) {
+    const dx = game.flight.pos.x - RUNWAY_POS.x;
+    const dz = game.flight.pos.z - RUNWAY_POS.z;
+    if (Math.hypot(dx, dz) < LANDING_RADIUS) {
+      game.mission.landingBonus = true;
+      game.mission.score += LANDING_BONUS;
+      game.mission.bonus += LANDING_BONUS;
+      endGame('MISI SELESAI!', 'Semua 8 ring dilewati + PENDARATAN SEMPURNA di runway (+1000). Skor kamu ' + game.mission.score + ' poin.');
+      return;
+    }
   }
   if (result === 'crashed') crashPlane();
   if (game.timeLeft <= 0) {
@@ -187,6 +221,11 @@ function animate(now) {
   sea.texture.offset.x += dt * 0.004;
   sea.texture.offset.y += dt * 0.0025;
   runway.sock.rotation.y = time * 0.7;
+
+  // Golden-hour weather and birds run in every state, even the title.
+  updateWeather(weather, dt, time);
+  updateBirds(birds, dt, time);
+  game.mission.wind = weather.wind || 0;
 
   if (!shotApplied && game.shot) {
     shotApplied = true;
