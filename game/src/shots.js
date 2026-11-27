@@ -28,7 +28,10 @@ export function applyShot(game, name) {
     mission.ringsCleared = 7;
   } else if (name === 'cockpit') {
     // Cockpit view: lit instruments, terrain and the first ring ahead.
-    s.pos.set(-60, 55, 380);
+    // Start ~205 m out so that, after the ~105 m the sim advances before
+    // the screenshot, the ring sits ~100 m ahead as a full circle instead
+    // of a giant arc filling half the frame.
+    s.pos.set(-26, 55, 430);
     s.heading = -2.55;
     s.pitch = -0.02;
     s.roll = 0.06;
